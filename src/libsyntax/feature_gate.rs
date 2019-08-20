@@ -30,7 +30,6 @@ use crate::tokenstream::TokenTree;
 
 use errors::{Applicability, DiagnosticBuilder, Handler};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_data_structures::sync::Lock;
 use rustc_target::spec::abi::Abi;
 use syntax_pos::{Span, DUMMY_SP, MultiSpan};
 use log::debug;
@@ -560,6 +559,9 @@ declare_features! (
     // Allows `impl Trait` to be used inside type aliases (RFC 2515).
     (active, type_alias_impl_trait, "1.38.0", Some(63063), None),
 
+    // Allows the use of or-patterns, e.g. `0 | 1`.
+    (active, or_patterns, "1.38.0", Some(54883), None),
+
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates
     // -------------------------------------------------------------------------
@@ -572,6 +574,7 @@ pub const INCOMPLETE_FEATURES: &[Symbol] = &[
     sym::impl_trait_in_bindings,
     sym::generic_associated_types,
     sym::const_generics,
+    sym::or_patterns,
     sym::let_chains,
 ];
 
@@ -1956,7 +1959,7 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
 
             ast::ItemKind::Enum(ast::EnumDef{ref variants, ..}, ..) => {
                 for variant in variants {
-                    match (&variant.node.data, &variant.node.disr_expr) {
+                    match (&variant.data, &variant.disr_expr) {
                         (ast::VariantData::Unit(..), _) => {},
                         (_, Some(disr_expr)) =>
                             gate_feature_post!(
@@ -2087,11 +2090,6 @@ impl<'a> Visitor<'a> for PostExpansionVisitor<'a> {
                     gate_feature_post!(&self, type_ascription, e.span,
                                        "type ascription is experimental");
                 }
-            }
-            ast::ExprKind::Yield(..) => {
-                gate_feature_post!(&self, generators,
-                                  e.span,
-                                  "yield syntax is experimental");
             }
             ast::ExprKind::TryBlock(_) => {
                 gate_feature_post!(&self, try_blocks, e.span, "`try` expression is experimental");
@@ -2427,10 +2425,6 @@ pub fn get_features(span_handler: &Handler, krate_attrs: &[ast::Attribute],
     features
 }
 
-fn for_each_in_lock<T>(vec: &Lock<Vec<T>>, f: impl Fn(&T)) {
-    vec.borrow().iter().for_each(f);
-}
-
 pub fn check_crate(krate: &ast::Crate,
                    sess: &ParseSess,
                    features: &Features,
@@ -2443,26 +2437,17 @@ pub fn check_crate(krate: &ast::Crate,
         plugin_attributes,
     };
 
-    for_each_in_lock(&sess.param_attr_spans, |span| gate_feature!(
-        &ctx,
-        param_attrs,
-        *span,
-        "attributes on function parameters are unstable"
-    ));
+    macro_rules! gate_all {
+        ($spans:ident, $gate:ident, $msg:literal) => {
+            for span in &*sess.$spans.borrow() { gate_feature!(&ctx, $gate, *span, $msg); }
+        }
+    }
 
-    for_each_in_lock(&sess.let_chains_spans, |span| gate_feature!(
-        &ctx,
-        let_chains,
-        *span,
-        "`let` expressions in this position are experimental"
-    ));
-
-    for_each_in_lock(&sess.async_closure_spans, |span| gate_feature!(
-        &ctx,
-        async_closure,
-        *span,
-        "async closures are unstable"
-    ));
+    gate_all!(param_attr_spans, param_attrs, "attributes on function parameters are unstable");
+    gate_all!(let_chains_spans, let_chains, "`let` expressions in this position are experimental");
+    gate_all!(async_closure_spans, async_closure, "async closures are unstable");
+    gate_all!(yield_spans, generators, "yield syntax is experimental");
+    gate_all!(or_pattern_spans, or_patterns, "or-patterns syntax is experimental");
 
     let visitor = &mut PostExpansionVisitor {
         context: &ctx,

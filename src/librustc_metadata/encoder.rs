@@ -30,8 +30,9 @@ use rustc_data_structures::sync::Lrc;
 use std::u32;
 use syntax::ast;
 use syntax::attr;
+use syntax::ext::proc_macro::is_proc_macro_attr;
 use syntax::source_map::Spanned;
-use syntax::symbol::{kw, sym};
+use syntax::symbol::{kw, sym, Ident};
 use syntax_pos::{self, FileName, SourceFile, Span};
 use log::{debug, trace};
 
@@ -170,6 +171,13 @@ impl<'tcx> SpecializedEncoder<Span> for EncodeContext<'tcx> {
         len.encode(self)
 
         // Don't encode the expansion context.
+    }
+}
+
+impl SpecializedEncoder<Ident> for EncodeContext<'tcx> {
+    fn specialized_encode(&mut self, ident: &Ident) -> Result<(), Self::Error> {
+        // FIXME(jseyfried): intercrate hygiene
+        ident.name.encode(self)
     }
 }
 
@@ -376,6 +384,8 @@ impl<'tcx> EncodeContext<'tcx> {
     }
 
     fn encode_crate_root(&mut self) -> Lazy<CrateRoot<'tcx>> {
+        let is_proc_macro = self.tcx.sess.crate_types.borrow().contains(&CrateType::ProcMacro);
+
         let mut i = self.position();
 
         let crate_deps = self.encode_crate_deps();
@@ -456,15 +466,22 @@ impl<'tcx> EncodeContext<'tcx> {
             self.lazy_seq(interpret_alloc_index)
         };
 
+
         i = self.position();
         let entries_index = self.entries_index.write_index(&mut self.opaque);
         let entries_index_bytes = self.position() - i;
 
+        // Encode the proc macro data
+        i = self.position();
+        let proc_macro_data = self.encode_proc_macros();
+        let proc_macro_data_bytes = self.position() - i;
+
+
         let attrs = tcx.hir().krate_attrs();
-        let is_proc_macro = tcx.sess.crate_types.borrow().contains(&CrateType::ProcMacro);
         let has_default_lib_allocator = attr::contains_name(&attrs, sym::default_lib_allocator);
         let has_global_allocator = *tcx.sess.has_global_allocator.get();
         let has_panic_handler = *tcx.sess.has_panic_handler.try_get().unwrap_or(&false);
+
 
         let root = self.lazy(&CrateRoot {
             name: tcx.crate_name(LOCAL_CRATE),
@@ -484,6 +501,7 @@ impl<'tcx> EncodeContext<'tcx> {
             } else {
                 None
             },
+            proc_macro_data,
             proc_macro_stability: if is_proc_macro {
                 tcx.lookup_stability(DefId::local(CRATE_DEF_INDEX)).map(|stab| stab.clone())
             } else {
@@ -532,6 +550,7 @@ impl<'tcx> EncodeContext<'tcx> {
             println!("            impl bytes: {}", impl_bytes);
             println!("    exp. symbols bytes: {}", exported_symbols_bytes);
             println!("  def-path table bytes: {}", def_path_table_bytes);
+            println!(" proc-macro-data-bytes: {}", proc_macro_data_bytes);
             println!("            item bytes: {}", item_bytes);
             println!("   entries index bytes: {}", entries_index_bytes);
             println!("            zero bytes: {}", zero_bytes);
@@ -1463,6 +1482,22 @@ impl EncodeContext<'tcx> {
         self.lazy_seq(foreign_modules.iter().cloned())
     }
 
+    fn encode_proc_macros(&mut self) -> Option<LazySeq<DefIndex>> {
+        let is_proc_macro = self.tcx.sess.crate_types.borrow().contains(&CrateType::ProcMacro);
+        if is_proc_macro {
+            let proc_macros: Vec<_> = self.tcx.hir().krate().items.values().filter_map(|item| {
+                if item.attrs.iter().any(|attr| is_proc_macro_attr(attr)) {
+                    Some(item.hir_id.owner)
+                } else {
+                    None
+                }
+            }).collect();
+            Some(self.lazy_seq(proc_macros))
+        } else {
+            None
+        }
+    }
+
     fn encode_crate_deps(&mut self) -> LazySeq<CrateDep> {
         let crates = self.tcx.crates();
 
@@ -1676,7 +1711,7 @@ impl Visitor<'tcx> for EncodeContext<'tcx> {
                      id: hir::HirId) {
         intravisit::walk_variant(self, v, g, id);
 
-        if let Some(ref discr) = v.node.disr_expr {
+        if let Some(ref discr) = v.disr_expr {
             let def_id = self.tcx.hir().local_def_id(discr.hir_id);
             self.record(def_id, EncodeContext::encode_info_for_anon_const, def_id);
         }
