@@ -77,7 +77,7 @@ impl Thread {
     }
 
     pub fn set_name(_name: &CStr) {
-        assert!(false, "FIXME: set_name");
+        // do nothing
     }
 
     pub fn sleep(dur: Duration) {
