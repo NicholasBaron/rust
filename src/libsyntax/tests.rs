@@ -63,7 +63,7 @@ crate fn matches_codepattern(a : &str, b : &str) -> bool {
             (None, None) => return true,
             (None, _) => return false,
             (Some(&a), None) => {
-                if is_pattern_whitespace(a) {
+                if rustc_lexer::is_whitespace(a) {
                     break // trailing whitespace check is out of loop for borrowck
                 } else {
                     return false
@@ -72,11 +72,11 @@ crate fn matches_codepattern(a : &str, b : &str) -> bool {
             (Some(&a), Some(&b)) => (a, b)
         };
 
-        if is_pattern_whitespace(a) && is_pattern_whitespace(b) {
+        if rustc_lexer::is_whitespace(a) && rustc_lexer::is_whitespace(b) {
             // skip whitespace for a and b
             scan_for_non_ws_or_end(&mut a_iter);
             scan_for_non_ws_or_end(&mut b_iter);
-        } else if is_pattern_whitespace(a) {
+        } else if rustc_lexer::is_whitespace(a) {
             // skip whitespace for a
             scan_for_non_ws_or_end(&mut a_iter);
         } else if a == b {
@@ -88,18 +88,14 @@ crate fn matches_codepattern(a : &str, b : &str) -> bool {
     }
 
     // check if a has *only* trailing whitespace
-    a_iter.all(is_pattern_whitespace)
+    a_iter.all(rustc_lexer::is_whitespace)
 }
 
 /// Advances the given peekable `Iterator` until it reaches a non-whitespace character
 fn scan_for_non_ws_or_end<I: Iterator<Item = char>>(iter: &mut Peekable<I>) {
-    while iter.peek().copied().map(|c| is_pattern_whitespace(c)) == Some(true) {
+    while iter.peek().copied().map(|c| rustc_lexer::is_whitespace(c)) == Some(true) {
         iter.next();
     }
-}
-
-fn is_pattern_whitespace(c: char) -> bool {
-    rustc_lexer::character_properties::is_whitespace(c)
 }
 
 /// Identify a position in the text by the Nth occurrence of a string.
@@ -144,11 +140,14 @@ fn test_harness(file_text: &str, span_labels: Vec<SpanLabel>, expected_output: &
             println!("text: {:?}", source_map.span_to_snippet(span));
         }
 
-        let emitter = EmitterWriter::new(Box::new(Shared { data: output.clone() }),
-                                        Some(source_map.clone()),
-                                        false,
-                                        false,
-                                        false);
+        let emitter = EmitterWriter::new(
+            Box::new(Shared { data: output.clone() }),
+            Some(source_map.clone()),
+            false,
+            false,
+            false,
+            None,
+        );
         let handler = Handler::with_emitter(true, None, Box::new(emitter));
         handler.span_err(msp, "foo");
 

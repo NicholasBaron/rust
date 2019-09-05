@@ -33,6 +33,7 @@ extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_target;
 extern crate rustc_typeck;
+extern crate rustc_lexer;
 extern crate serialize;
 extern crate syntax;
 extern crate syntax_pos;
@@ -46,7 +47,7 @@ use std::panic;
 use std::process;
 
 use rustc::session::{early_warn, early_error};
-use rustc::session::config::{ErrorOutputType, RustcOptGroup};
+use rustc::session::config::{ErrorOutputType, RustcOptGroup, make_crate_type_option};
 
 #[macro_use]
 mod externalfiles;
@@ -67,6 +68,7 @@ pub mod html {
     crate mod render;
     crate mod static_files;
     crate mod toc;
+    crate mod sources;
 }
 mod markdown;
 mod passes;
@@ -132,6 +134,7 @@ fn opts() -> Vec<RustcOptGroup> {
         stable("crate-name", |o| {
             o.optopt("", "crate-name", "specify the name of this crate", "NAME")
         }),
+        make_crate_type_option(),
         stable("L", |o| {
             o.optmulti("L", "library-path", "directory to add to crate search path",
                        "DIR")
@@ -239,9 +242,6 @@ fn opts() -> Vec<RustcOptGroup> {
         }),
         unstable("crate-version", |o| {
             o.optopt("", "crate-version", "crate version to print into documentation", "VERSION")
-        }),
-        unstable("linker", |o| {
-            o.optopt("", "linker", "linker used for building executable test code", "PATH")
         }),
         unstable("sort-modules-by-appearance", |o| {
             o.optflag("", "sort-modules-by-appearance", "sort modules by where they appear in the \

@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::env;
 
 use crate::ast::{self, Ident, Name};
 use crate::source_map;
@@ -7,12 +6,10 @@ use crate::ext::base::{ExtCtxt, MacEager, MacResult};
 use crate::parse::token::{self, Token};
 use crate::ptr::P;
 use crate::symbol::kw;
-use crate::tokenstream::{TokenTree};
+use crate::tokenstream::{TokenTree, TokenStream};
 
 use smallvec::smallvec;
 use syntax_pos::Span;
-
-use crate::diagnostics::metadata::output_metadata;
 
 pub use errors::*;
 
@@ -30,12 +27,11 @@ pub type ErrorMap = BTreeMap<Name, ErrorInfo>;
 
 pub fn expand_diagnostic_used<'cx>(ecx: &'cx mut ExtCtxt<'_>,
                                    span: Span,
-                                   token_tree: &[TokenTree])
+                                   tts: TokenStream)
                                    -> Box<dyn MacResult+'cx> {
-    let code = match token_tree {
-        [
-            TokenTree::Token(Token { kind: token::Ident(code, _), .. })
-        ] => code,
+    assert_eq!(tts.len(), 1);
+    let code = match tts.into_trees().next() {
+        Some(TokenTree::Token(Token { kind: token::Ident(code, _), .. })) => code,
         _ => unreachable!()
     };
 
@@ -65,20 +61,21 @@ pub fn expand_diagnostic_used<'cx>(ecx: &'cx mut ExtCtxt<'_>,
 
 pub fn expand_register_diagnostic<'cx>(ecx: &'cx mut ExtCtxt<'_>,
                                        span: Span,
-                                       token_tree: &[TokenTree])
+                                       tts: TokenStream)
                                        -> Box<dyn MacResult+'cx> {
-    let (code, description) = match  token_tree {
-        [
-            TokenTree::Token(Token { kind: token::Ident(code, _), .. })
-        ] => {
-            (*code, None)
-        },
-        [
-            TokenTree::Token(Token { kind: token::Ident(code, _), .. }),
-            TokenTree::Token(Token { kind: token::Comma, .. }),
-            TokenTree::Token(Token { kind: token::Literal(token::Lit { symbol, .. }), ..})
-        ] => {
-            (*code, Some(*symbol))
+    assert!(tts.len() == 1 || tts.len() == 3);
+    let mut cursor = tts.into_trees();
+    let code = match cursor.next() {
+        Some(TokenTree::Token(Token { kind: token::Ident(code, _), .. })) => code,
+        _ => unreachable!()
+    };
+    let description = match  (cursor.next(), cursor.next()) {
+        (None, None) => None,
+        (
+            Some(TokenTree::Token(Token { kind: token::Comma, .. })),
+            Some(TokenTree::Token(Token { kind: token::Literal(token::Lit { symbol, .. }), ..}))
+        ) => {
+            Some(symbol)
         },
         _ => unreachable!()
     };
@@ -124,38 +121,15 @@ pub fn expand_register_diagnostic<'cx>(ecx: &'cx mut ExtCtxt<'_>,
 
 pub fn expand_build_diagnostic_array<'cx>(ecx: &'cx mut ExtCtxt<'_>,
                                           span: Span,
-                                          token_tree: &[TokenTree])
+                                          tts: TokenStream)
                                           -> Box<dyn MacResult+'cx> {
-    assert_eq!(token_tree.len(), 3);
-    let (crate_name, ident) = match (&token_tree[0], &token_tree[2]) {
-        (
-            // Crate name.
-            &TokenTree::Token(Token { kind: token::Ident(crate_name, _), .. }),
-            // DIAGNOSTICS ident.
-            &TokenTree::Token(Token { kind: token::Ident(name, _), span })
-        ) => (crate_name, Ident::new(name, span)),
+    assert_eq!(tts.len(), 3);
+    let ident = match tts.into_trees().nth(2) {
+        // DIAGNOSTICS ident.
+        Some(TokenTree::Token(Token { kind: token::Ident(name, _), span }))
+        => Ident::new(name, span),
         _ => unreachable!()
     };
-
-    // Output error metadata to `tmp/extended-errors/<target arch>/<crate name>.json`
-    if let Ok(target_triple) = env::var("CFG_COMPILER_HOST_TRIPLE") {
-        ecx.parse_sess.registered_diagnostics.with_lock(|diagnostics| {
-            if let Err(e) = output_metadata(ecx,
-                                            &target_triple,
-                                            &crate_name.as_str(),
-                                            diagnostics) {
-                ecx.span_bug(span, &format!(
-                    "error writing metadata for triple `{}` and crate `{}`, error: {}, \
-                     cause: {:?}",
-                    target_triple, crate_name, e.description(), e.source()
-                ));
-            }
-        });
-    } else {
-        ecx.span_err(span, &format!(
-            "failed to write metadata for crate `{}` because $CFG_COMPILER_HOST_TRIPLE is not set",
-            crate_name));
-    }
 
     // Construct the output expression.
     let (count, expr) =

@@ -39,7 +39,7 @@ Generally, `Self: Sized` is used to indicate that the trait should not be used
 as a trait object. If the trait comes from your own crate, consider removing
 this restriction.
 
-### Method references the `Self` type in its arguments or return type
+### Method references the `Self` type in its parameters or return type
 
 This happens when a trait has a method like the following:
 
@@ -2231,7 +2231,7 @@ register_diagnostics! {
     E0495, // cannot infer an appropriate lifetime due to conflicting requirements
     E0566, // conflicting representation hints
     E0623, // lifetime mismatch where both parameters are anonymous regions
-    E0628, // generators cannot have explicit arguments
+    E0628, // generators cannot have explicit parameters
     E0631, // type mismatch in closure arguments
     E0637, // "'_" is not a valid lifetime bound
     E0657, // `impl Trait` can only capture lifetimes bound at the fn level
@@ -2239,7 +2239,7 @@ register_diagnostics! {
     E0688, // in-band lifetimes cannot be mixed with explicit lifetime binders
     E0697, // closures cannot be static
     E0707, // multiple elided lifetimes used in arguments of `async fn`
-    E0708, // `async` non-`move` closures with arguments are not currently supported
+    E0708, // `async` non-`move` closures with parameters are not currently supported
     E0709, // multiple different lifetimes used in arguments of `async fn`
     E0710, // an unknown tool name found in scoped lint
     E0711, // a feature has been declared with conflicting stability attributes

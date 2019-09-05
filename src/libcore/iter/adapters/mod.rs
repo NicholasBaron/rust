@@ -66,13 +66,6 @@ impl<I> Iterator for Rev<I> where I: DoubleEndedIterator {
     {
         self.iter.rfind(predicate)
     }
-
-    #[inline]
-    fn rposition<P>(&mut self, predicate: P) -> Option<usize> where
-        P: FnMut(Self::Item) -> bool
-    {
-        self.iter.position(predicate)
-    }
 }
 
 #[stable(feature = "rust1", since = "1.0.0")]
@@ -1309,7 +1302,7 @@ impl<I> DoubleEndedIterator for Peekable<I> where I: DoubleEndedIterator {
         Self: Sized, F: FnMut(B, Self::Item) -> R, R: Try<Ok=B>
     {
         match self.peeked.take() {
-            Some(None) => return Try::from_ok(init),
+            Some(None) => Try::from_ok(init),
             Some(Some(v)) => match self.iter.try_rfold(init, &mut f).into_result() {
                 Ok(acc) => f(acc, v),
                 Err(e) => {
@@ -1326,7 +1319,7 @@ impl<I> DoubleEndedIterator for Peekable<I> where I: DoubleEndedIterator {
         where Fold: FnMut(Acc, Self::Item) -> Acc,
     {
         match self.peeked {
-            Some(None) => return init,
+            Some(None) => init,
             Some(Some(v)) => {
                 let acc = self.iter.rfold(init, &mut fold);
                 fold(acc, v)

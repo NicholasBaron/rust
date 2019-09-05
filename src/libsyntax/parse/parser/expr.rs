@@ -1,12 +1,13 @@
 use super::{Parser, PResult, Restrictions, PrevTokenKind, TokenType, PathStyle};
 use super::{BlockMode, SemiColonMode};
 use super::{SeqSep, TokenExpectType};
+use super::pat::{GateOr, PARAM_EXPECTED};
 
 use crate::maybe_recover_from_interpolated_ty_qpath;
 use crate::ptr::P;
 use crate::ast::{self, Attribute, AttrStyle, Ident, CaptureBy, BlockCheckMode};
 use crate::ast::{Expr, ExprKind, RangeLimits, Label, Movability, IsAsync, Arm};
-use crate::ast::{Ty, TyKind, FunctionRetTy, Arg, FnDecl};
+use crate::ast::{Ty, TyKind, FunctionRetTy, Param, FnDecl};
 use crate::ast::{BinOpKind, BinOp, UnOp};
 use crate::ast::{Mac, AnonConst, Field};
 
@@ -888,6 +889,36 @@ impl<'a> Parser<'a> {
                     hi = path.span;
                     return Ok(self.mk_expr(lo.to(hi), ExprKind::Path(Some(qself), path), attrs));
                 }
+                if self.token.is_path_start() {
+                    let path = self.parse_path(PathStyle::Expr)?;
+
+                    // `!`, as an operator, is prefix, so we know this isn't that
+                    if self.eat(&token::Not) {
+                        // MACRO INVOCATION expression
+                        let (delim, tts) = self.expect_delimited_token_tree()?;
+                        hi = self.prev_span;
+                        ex = ExprKind::Mac(Mac {
+                            path,
+                            tts,
+                            delim,
+                            span: lo.to(hi),
+                            prior_type_ascription: self.last_type_ascription,
+                        });
+                    } else if self.check(&token::OpenDelim(token::Brace)) {
+                        if let Some(expr) = self.maybe_parse_struct_expr(lo, &path, &attrs) {
+                            return expr;
+                        } else {
+                            hi = path.span;
+                            ex = ExprKind::Path(None, path);
+                        }
+                    } else {
+                        hi = path.span;
+                        ex = ExprKind::Path(None, path);
+                    }
+
+                    let expr = self.mk_expr(lo.to(hi), ex, attrs);
+                    return self.maybe_recover_from_bad_qpath(expr, true);
+                }
                 if self.check_keyword(kw::Move) || self.check_keyword(kw::Static) {
                     return self.parse_lambda_expr(attrs);
                 }
@@ -999,39 +1030,13 @@ impl<'a> Parser<'a> {
                     }
 
                     let span = lo.to(hi);
-                    self.sess.yield_spans.borrow_mut().push(span);
+                    self.sess.gated_spans.yields.borrow_mut().push(span);
                 } else if self.eat_keyword(kw::Let) {
                     return self.parse_let_expr(attrs);
                 } else if is_span_rust_2018 && self.eat_keyword(kw::Await) {
                     let (await_hi, e_kind) = self.parse_incorrect_await_syntax(lo, self.prev_span)?;
                     hi = await_hi;
                     ex = e_kind;
-                } else if self.token.is_path_start() {
-                    let path = self.parse_path(PathStyle::Expr)?;
-
-                    // `!`, as an operator, is prefix, so we know this isn't that
-                    if self.eat(&token::Not) {
-                        // MACRO INVOCATION expression
-                        let (delim, tts) = self.expect_delimited_token_tree()?;
-                        hi = self.prev_span;
-                        ex = ExprKind::Mac(Mac {
-                            path,
-                            tts,
-                            delim,
-                            span: lo.to(hi),
-                            prior_type_ascription: self.last_type_ascription,
-                        });
-                    } else if self.check(&token::OpenDelim(token::Brace)) {
-                        if let Some(expr) = self.maybe_parse_struct_expr(lo, &path, &attrs) {
-                            return expr;
-                        } else {
-                            hi = path.span;
-                            ex = ExprKind::Path(None, path);
-                        }
-                    } else {
-                        hi = path.span;
-                        ex = ExprKind::Path(None, path);
-                    }
                 } else {
                     if !self.unclosed_delims.is_empty() && self.check(&token::Semi) {
                         // Don't complain about bare semicolons after unclosed braces
@@ -1111,7 +1116,7 @@ impl<'a> Parser<'a> {
         };
         if asyncness.is_async() {
             // Feature gate `async ||` closures.
-            self.sess.async_closure_spans.borrow_mut().push(self.prev_span);
+            self.sess.gated_spans.async_closure.borrow_mut().push(self.prev_span);
         }
 
         let capture_clause = self.parse_capture_clause();
@@ -1156,7 +1161,7 @@ impl<'a> Parser<'a> {
                     &[&token::BinOp(token::Or), &token::OrOr],
                     SeqSep::trailing_allowed(token::Comma),
                     TokenExpectType::NoExpect,
-                    |p| p.parse_fn_block_arg()
+                    |p| p.parse_fn_block_param()
                 )?.0;
                 self.expect_or()?;
                 args
@@ -1171,11 +1176,11 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    /// Parses an argument in a lambda header (e.g., `|arg, arg|`).
-    fn parse_fn_block_arg(&mut self) -> PResult<'a, Arg> {
+    /// Parses a parameter in a lambda header (e.g., `|arg, arg|`).
+    fn parse_fn_block_param(&mut self) -> PResult<'a, Param> {
         let lo = self.token.span;
-        let attrs = self.parse_arg_attributes()?;
-        let pat = self.parse_pat(Some("argument name"))?;
+        let attrs = self.parse_param_attributes()?;
+        let pat = self.parse_pat(PARAM_EXPECTED)?;
         let t = if self.eat(&token::Colon) {
             self.parse_ty()?
         } else {
@@ -1186,7 +1191,7 @@ impl<'a> Parser<'a> {
             })
         };
         let span = lo.to(self.token.span);
-        Ok(Arg {
+        Ok(Param {
             attrs: attrs.into(),
             ty: t,
             pat,
@@ -1234,26 +1239,27 @@ impl<'a> Parser<'a> {
 
         if let ExprKind::Let(..) = cond.node {
             // Remove the last feature gating of a `let` expression since it's stable.
-            let last = self.sess.let_chains_spans.borrow_mut().pop();
+            let last = self.sess.gated_spans.let_chains.borrow_mut().pop();
             debug_assert_eq!(cond.span, last.unwrap());
         }
 
         Ok(cond)
     }
 
-    /// Parses a `let $pats = $expr` pseudo-expression.
+    /// Parses a `let $pat = $expr` pseudo-expression.
     /// The `let` token has already been eaten.
     fn parse_let_expr(&mut self, attrs: ThinVec<Attribute>) -> PResult<'a, P<Expr>> {
         let lo = self.prev_span;
-        let pats = self.parse_pats()?;
+        // FIXME(or_patterns, Centril | dlrobertson): use `parse_top_pat` instead.
+        let pat = self.parse_top_pat_unpack(GateOr::No)?;
         self.expect(&token::Eq)?;
         let expr = self.with_res(
             Restrictions::NO_STRUCT_LITERAL,
             |this| this.parse_assoc_expr_with(1 + prec_let_scrutinee_needs_par(), None.into())
         )?;
         let span = lo.to(expr.span);
-        self.sess.let_chains_spans.borrow_mut().push(span);
-        Ok(self.mk_expr(span, ExprKind::Let(pats, expr), attrs))
+        self.sess.gated_spans.let_chains.borrow_mut().push(span);
+        Ok(self.mk_expr(span, ExprKind::Let(pat, expr), attrs))
     }
 
     /// `else` token already eaten
@@ -1283,7 +1289,7 @@ impl<'a> Parser<'a> {
             _ => None,
         };
 
-        let pat = self.parse_top_level_pat()?;
+        let pat = self.parse_top_pat(GateOr::Yes)?;
         if !self.eat_keyword(kw::In) {
             let in_span = self.prev_span.between(self.token.span);
             self.struct_span_err(in_span, "missing `in` in `for` loop")
@@ -1387,7 +1393,8 @@ impl<'a> Parser<'a> {
     crate fn parse_arm(&mut self) -> PResult<'a, Arm> {
         let attrs = self.parse_outer_attributes()?;
         let lo = self.token.span;
-        let pats = self.parse_pats()?;
+        // FIXME(or_patterns, Centril | dlrobertson): use `parse_top_pat` instead.
+        let pat = self.parse_top_pat_unpack(GateOr::No)?;
         let guard = if self.eat_keyword(kw::If) {
             Some(self.parse_expr()?)
         } else {
@@ -1448,7 +1455,7 @@ impl<'a> Parser<'a> {
 
         Ok(ast::Arm {
             attrs,
-            pats,
+            pats: pat, // FIXME(or_patterns, Centril | dlrobertson): this should just be `pat,`.
             guard,
             body: expr,
             span: lo.to(hi),
