@@ -248,7 +248,10 @@ fn run_test(
     };
     let output_file = outdir.path().join("rust_out");
 
-    let mut compiler = Command::new(std::env::current_exe().unwrap().with_file_name("rustc"));
+    let rustc_binary = options.test_builder.as_ref().map(|v| &**v).unwrap_or_else(|| {
+        rustc_interface::util::rustc_path().expect("found rustc")
+    });
+    let mut compiler = Command::new(&rustc_binary);
     compiler.arg("--crate-type").arg("bin");
     for cfg in &options.cfgs {
         compiler.arg("--cfg").arg(&cfg);
@@ -398,7 +401,7 @@ pub fn make_test(s: &str,
         // Any errors in parsing should also appear when the doctest is compiled for real, so just
         // send all the errors that libsyntax emits directly into a `Sink` instead of stderr.
         let cm = Lrc::new(SourceMap::new(FilePathMapping::empty()));
-        let emitter = EmitterWriter::new(box io::sink(), None, false, false, false, None);
+        let emitter = EmitterWriter::new(box io::sink(), None, false, false, false, None, false);
         // FIXME(misdreavus): pass `-Z treat-err-as-bug` to the doctest parser
         let handler = Handler::with_emitter(false, None, box emitter);
         let sess = ParseSess::with_span_handler(handler, cm);
@@ -423,7 +426,7 @@ pub fn make_test(s: &str,
                 Ok(Some(item)) => {
                     if !found_main {
                         if let ast::ItemKind::Fn(..) = item.node {
-                            if item.ident.as_str() == "main" {
+                            if item.ident.name == sym::main {
                                 found_main = true;
                             }
                         }

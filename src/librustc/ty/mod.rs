@@ -1938,9 +1938,15 @@ pub struct FieldDef {
     pub vis: Visibility,
 }
 
-/// The definition of an abstract data type -- a struct or enum.
+/// The definition of a user-defined type, e.g., a `struct`, `enum`, or `union`.
 ///
 /// These are all interned (by `intern_adt_def`) into the `adt_defs` table.
+///
+/// The initialism *"Adt"* stands for an [*algebraic data type (ADT)*][adt].
+/// This is slightly wrong because `union`s are not ADTs.
+/// Moreover, Rust only allows recursive data types through indirection.
+///
+/// [adt]: https://en.wikipedia.org/wiki/Algebraic_data_type
 pub struct AdtDef {
     /// `DefId` of the struct, enum or union item.
     pub did: DefId,
@@ -2791,6 +2797,10 @@ impl<'tcx> TyCtxt<'tcx> {
         })
     }
 
+    pub fn opt_item_name(self, def_id: DefId) -> Option<Ident> {
+        self.hir().as_local_hir_id(def_id).and_then(|hir_id| self.hir().get(hir_id).ident())
+    }
+
     pub fn opt_associated_item(self, def_id: DefId) -> Option<AssocItem> {
         let is_associated_item = if let Some(hir_id) = self.hir().as_local_hir_id(def_id) {
             match self.hir().get(hir_id) {
@@ -2894,6 +2904,13 @@ impl<'tcx> TyCtxt<'tcx> {
     pub fn impls_are_allowed_to_overlap(self, def_id1: DefId, def_id2: DefId)
                                         -> Option<ImplOverlapKind>
     {
+        // If either trait impl references an error, they're allowed to overlap,
+        // as one of them essentially doesn't exist.
+        if self.impl_trait_ref(def_id1).map_or(false, |tr| tr.references_error()) ||
+            self.impl_trait_ref(def_id2).map_or(false, |tr| tr.references_error()) {
+            return Some(ImplOverlapKind::Permitted);
+        }
+
         let is_legit = if self.features().overlapping_marker_traits {
             let trait1_is_empty = self.impl_trait_ref(def_id1)
                 .map_or(false, |trait_ref| {

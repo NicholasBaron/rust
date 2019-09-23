@@ -232,9 +232,9 @@ dependencies = [
 
 [[package]]
 name = "byteorder"
-version = "1.2.7"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94f88df23a25417badc922ab0f5716cc1330e87f71ddd9203b3a3ccd9cedf75d"
+checksum = "a7c3dd8985a7111efc5c80b44e23ecdd8c007de8ade3b96595387e812b957cf5"
 
 [[package]]
 name = "bytes"
@@ -270,6 +270,7 @@ dependencies = [
  "atty",
  "bytesize",
  "cargo-test-macro",
+ "cargo-test-support",
  "clap",
  "core-foundation",
  "crates-io",
@@ -286,8 +287,9 @@ dependencies = [
  "git2",
  "git2-curl",
  "glob",
- "hex",
+ "hex 0.4.0",
  "home",
+ "humantime",
  "ignore",
  "im-rc",
  "jobserver",
@@ -326,6 +328,23 @@ dependencies = [
 [[package]]
 name = "cargo-test-macro"
 version = "0.1.0"
+
+[[package]]
+name = "cargo-test-support"
+version = "0.1.0"
+dependencies = [
+ "cargo",
+ "cargo-test-macro",
+ "filetime",
+ "flate2",
+ "git2",
+ "glob",
+ "lazy_static 1.3.0",
+ "remove_dir_all",
+ "serde_json",
+ "tar",
+ "url 2.1.0",
+]
 
 [[package]]
 name = "cargo_metadata"
@@ -436,7 +455,7 @@ dependencies = [
  "itertools 0.8.0",
  "lazy_static 1.3.0",
  "matches",
- "pulldown-cmark",
+ "pulldown-cmark 0.6.0",
  "quine-mc_cluskey",
  "regex-syntax",
  "semver",
@@ -698,7 +717,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09de9ee0fc255ace04c7fa0763c9395a945c37c8292bb554f8d48361d1dcf1b4"
 dependencies = [
  "commoncrypto",
- "hex",
+ "hex 0.3.2",
  "openssl",
  "winapi 0.3.6",
 ]
@@ -1261,6 +1280,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "805026a5d0141ffc30abb3be3173848ad46a1b1664fe632428479619a3644d77"
 
 [[package]]
+name = "hex"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "023b39be39e3a2da62a94feb433e91e8bcd37676fbc8bea371daf52b7a769a3e"
+
+[[package]]
 name = "home"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1612,7 +1637,7 @@ dependencies = [
  "num_cpus",
  "tokio",
  "tokio-codec",
- "unicase 2.4.0",
+ "unicase 2.5.1",
 ]
 
 [[package]]
@@ -1850,7 +1875,7 @@ dependencies = [
  "log",
  "memchr",
  "open",
- "pulldown-cmark",
+ "pulldown-cmark 0.5.3",
  "regex",
  "serde",
  "serde_derive",
@@ -1872,7 +1897,7 @@ dependencies = [
  "log",
  "mdbook",
  "memchr",
- "pulldown-cmark",
+ "pulldown-cmark 0.5.3",
  "rayon",
  "regex",
  "reqwest",
@@ -1932,7 +1957,7 @@ version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e27ca21f40a310bd06d9031785f4801710d566c184a6e15bad4f1d9b65f9425"
 dependencies = [
- "unicase 2.4.0",
+ "unicase 2.5.1",
 ]
 
 [[package]]
@@ -2062,10 +2087,10 @@ dependencies = [
  "directories",
  "env_logger",
  "getrandom",
- "hex",
+ "hex 0.3.2",
  "log",
  "num-traits",
- "rand 0.6.1",
+ "rand 0.7.0",
  "rustc-workspace-hack",
  "rustc_version",
  "shell-escape",
@@ -2138,6 +2163,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "once_cell"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6a04cb71e910d0034815600180f62a95bf6e67942d7ab52a166a68c7d7e9cd0"
+
+[[package]]
 name = "open"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2174,9 +2205,9 @@ checksum = "77af24da69f9d9341038eba93a073b1fdaaa1b788221b00a69bce9e762cb32de"
 
 [[package]]
 name = "openssl-src"
-version = "111.3.0+1.1.1c"
+version = "111.6.0+1.1.1d"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53ed5f31d294bdf5f7a4ba0a206c2754b0f60e9a63b7e3076babc5317873c797"
+checksum = "b9c2da1de8a7a3f860919c01540b03a6db16de042405a8a07a5e9d0b4b825d9c"
 dependencies = [
  "cc",
 ]
@@ -2530,7 +2561,19 @@ dependencies = [
  "bitflags",
  "getopts",
  "memchr",
- "unicase 2.4.0",
+ "unicase 2.5.1",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85b0ad0d4c1702965ee6bb5b4ff5e71f83850b497d497e9444302987bf9e26a4"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "unicase 2.5.1",
 ]
 
 [[package]]
@@ -3008,11 +3051,10 @@ dependencies = [
  "fmt_macros",
  "graphviz",
  "jobserver",
- "lazy_static 1.3.0",
  "log",
  "measureme",
  "num_cpus",
- "parking_lot 0.7.1",
+ "parking_lot 0.9.0",
  "polonius-engine",
  "rustc-rayon",
  "rustc-rayon-core",
@@ -3248,15 +3290,11 @@ dependencies = [
 name = "rustc-workspace-hack"
 version = "1.0.0"
 dependencies = [
- "byteorder",
  "crossbeam-utils 0.6.5",
- "parking_lot 0.7.1",
- "rand 0.6.1",
- "scopeguard 0.3.3",
  "serde",
  "serde_json",
  "smallvec",
- "syn 0.15.35",
+ "url 2.1.0",
  "winapi 0.3.6",
 ]
 
@@ -3310,7 +3348,7 @@ dependencies = [
  "log",
  "memmap",
  "num_cpus",
- "parking_lot 0.7.1",
+ "parking_lot 0.9.0",
  "rustc",
  "rustc_apfloat",
  "rustc_codegen_utils",
@@ -3353,7 +3391,7 @@ dependencies = [
  "jobserver",
  "lazy_static 1.3.0",
  "log",
- "parking_lot 0.7.1",
+ "parking_lot 0.9.0",
  "rustc-hash",
  "rustc-rayon",
  "rustc-rayon-core",
@@ -3368,6 +3406,7 @@ version = "0.0.0"
 dependencies = [
  "env_logger",
  "graphviz",
+ "lazy_static 1.3.0",
  "log",
  "rustc",
  "rustc_ast_borrowck",
@@ -3425,6 +3464,7 @@ name = "rustc_interface"
 version = "0.0.0"
 dependencies = [
  "log",
+ "once_cell",
  "rustc",
  "rustc-rayon",
  "rustc_ast_borrowck",
@@ -3704,7 +3744,7 @@ name = "rustdoc"
 version = "0.0.0"
 dependencies = [
  "minifier",
- "pulldown-cmark",
+ "pulldown-cmark 0.5.3",
  "rustc-rayon",
  "tempfile",
 ]
@@ -4258,13 +4298,13 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.0.5"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e91405c14320e5c79b3d148e1c86f40749a36e490642202a31689cb1a3452b2"
+checksum = "7a6e24d9338a0a5be79593e2fa15a648add6138caa803e2d5bc782c371732ca9"
 dependencies = [
  "cfg-if",
  "libc",
- "rand 0.6.1",
+ "rand 0.7.0",
  "redox_syscall",
  "remove_dir_all",
  "winapi 0.3.6",
@@ -4711,9 +4751,9 @@ dependencies = [
 
 [[package]]
 name = "unicase"
-version = "2.4.0"
+version = "2.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a84e5511b2a947f3ae965dcb29b13b7b1691b6e7332cf5dbc1744138d5acb7f6"
+checksum = "2e2e6bd1e59e56598518beb94fd6db628ded570326f0a98c679a304bd9f00150"
 dependencies = [
  "version_check",
 ]

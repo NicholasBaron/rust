@@ -190,7 +190,7 @@ pub enum ParamName {
     Fresh(usize),
 
     /// Indicates an illegal name was given and an error has been
-    /// repored (so we should squelch other derived errors). Occurs
+    /// reported (so we should squelch other derived errors). Occurs
     /// when, e.g., `'_` is used in the wrong place.
     Error,
 }
@@ -2749,4 +2749,16 @@ pub enum Node<'hir> {
     Visibility(&'hir Visibility),
 
     Crate,
+}
+
+impl Node<'_> {
+    pub fn ident(&self) -> Option<Ident> {
+        match self {
+            Node::TraitItem(TraitItem { ident, .. }) |
+            Node::ImplItem(ImplItem { ident, .. }) |
+            Node::ForeignItem(ForeignItem { ident, .. }) |
+            Node::Item(Item { ident, .. }) => Some(*ident),
+            _ => None,
+        }
+    }
 }

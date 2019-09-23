@@ -98,20 +98,20 @@ pub fn expand_test_or_bench(
 
     // creates test::$name
     let test_path = |name| {
-        cx.path(sp, vec![test_id, cx.ident_of(name)])
+        cx.path(sp, vec![test_id, cx.ident_of(name, sp)])
     };
 
     // creates test::ShouldPanic::$name
     let should_panic_path = |name| {
-        cx.path(sp, vec![test_id, cx.ident_of("ShouldPanic"), cx.ident_of(name)])
+        cx.path(sp, vec![test_id, cx.ident_of("ShouldPanic", sp), cx.ident_of(name, sp)])
     };
 
     // creates $name: $expr
-    let field = |name, expr| cx.field_imm(sp, cx.ident_of(name), expr);
+    let field = |name, expr| cx.field_imm(sp, cx.ident_of(name, sp), expr);
 
     let test_fn = if is_bench {
         // A simple ident for a lambda
-        let b = ast::Ident::from_str_and_span("b", attr_sp);
+        let b = cx.ident_of("b", attr_sp);
 
         cx.expr_call(sp, cx.expr_path(test_path("StaticBenchFn")), vec![
             // |b| self::test::assert_test_result(
@@ -145,8 +145,8 @@ pub fn expand_test_or_bench(
     let mut test_const = cx.item(sp, ast::Ident::new(item.ident.name, sp),
         vec![
             // #[cfg(test)]
-            cx.attribute(cx.meta_list(attr_sp, sym::cfg, vec![
-                cx.meta_list_item_word(attr_sp, sym::test)
+            cx.attribute(attr::mk_list_item(ast::Ident::new(sym::cfg, attr_sp), vec![
+                attr::mk_nested_word_item(ast::Ident::new(sym::test, attr_sp))
             ])),
             // #[rustc_test_marker]
             cx.attribute(cx.meta_word(attr_sp, sym::rustc_test_marker)),

@@ -17,7 +17,7 @@ use crate::util::common::ErrorReported;
 use crate::util::nodemap::FxHashMap;
 use crate::astconv::AstConv as _;
 
-use errors::{Applicability, DiagnosticBuilder};
+use errors::{Applicability, DiagnosticBuilder, pluralise};
 use syntax::ast;
 use syntax::symbol::{Symbol, kw, sym};
 use syntax::source_map::Span;
@@ -170,7 +170,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
         // Any expression that produces a value of type `!` must have diverged
         if ty.is_never() {
-            self.diverges.set(self.diverges.get() | Diverges::Always);
+            self.diverges.set(self.diverges.get() | Diverges::always(expr.span));
         }
 
         // Record the type, which applies it effects.
@@ -796,7 +796,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         // Call the generic checker.
         self.check_method_argument_types(
             span,
-            expr.span,
+            expr,
             method,
             &args[1..],
             DontTupleArguments,
@@ -813,18 +813,20 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         error: MethodError<'tcx>
     ) {
         let rcvr = &args[0];
-        let try_alt_rcvr = |err: &mut DiagnosticBuilder<'_>, new_rcvr_t| {
-            if let Ok(pick) = self.lookup_probe(
-                span,
-                segment.ident,
-                new_rcvr_t,
-                rcvr,
-                probe::ProbeScope::AllTraits,
-            ) {
-                err.span_label(
-                    pick.item.ident.span,
-                    &format!("the method is available for `{}` here", new_rcvr_t),
-                );
+        let try_alt_rcvr = |err: &mut DiagnosticBuilder<'_>, rcvr_t, lang_item| {
+            if let Some(new_rcvr_t) = self.tcx.mk_lang_item(rcvr_t, lang_item) {
+                if let Ok(pick) = self.lookup_probe(
+                    span,
+                    segment.ident,
+                    new_rcvr_t,
+                    rcvr,
+                    probe::ProbeScope::AllTraits,
+                ) {
+                    err.span_label(
+                        pick.item.ident.span,
+                        &format!("the method is available for `{}` here", new_rcvr_t),
+                    );
+                }
             }
         };
 
@@ -840,17 +842,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 // Try alternative arbitrary self types that could fulfill this call.
                 // FIXME: probe for all types that *could* be arbitrary self-types, not
                 // just this whitelist.
-                let box_rcvr_t = self.tcx.mk_box(rcvr_t);
-                try_alt_rcvr(&mut err, box_rcvr_t);
-                let pin_rcvr_t = self.tcx.mk_lang_item(
-                    rcvr_t,
-                    lang_items::PinTypeLangItem,
-                );
-                try_alt_rcvr(&mut err, pin_rcvr_t);
-                let arc_rcvr_t = self.tcx.mk_lang_item(rcvr_t, lang_items::Arc);
-                try_alt_rcvr(&mut err, arc_rcvr_t);
-                let rc_rcvr_t = self.tcx.mk_lang_item(rcvr_t, lang_items::Rc);
-                try_alt_rcvr(&mut err, rc_rcvr_t);
+                try_alt_rcvr(&mut err, rcvr_t, lang_items::OwnedBoxLangItem);
+                try_alt_rcvr(&mut err, rcvr_t, lang_items::PinTypeLangItem);
+                try_alt_rcvr(&mut err, rcvr_t, lang_items::Arc);
+                try_alt_rcvr(&mut err, rcvr_t, lang_items::Rc);
             }
             err.emit();
         }
@@ -1183,7 +1178,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
 
             struct_span_err!(tcx.sess, span, E0063,
                              "missing field{} {}{} in initializer of `{}`",
-                             if remaining_fields.len() == 1 { "" } else { "s" },
+                             pluralise!(remaining_fields.len()),
                              remaining_fields_names,
                              truncated_fields_error,
                              adt_ty)

@@ -11,7 +11,7 @@ use crate::{Resolver, ResolutionError, Segment, ModuleKind};
 use crate::{names_to_string, module_to_string};
 use crate::diagnostics::Suggestion;
 
-use errors::Applicability;
+use errors::{Applicability, pluralise};
 
 use rustc_data_structures::ptr_key::PtrKey;
 use rustc::ty;
@@ -728,7 +728,7 @@ impl<'a, 'b> ImportResolver<'a, 'b> {
 
             let msg = format!(
                 "unresolved import{} {}",
-                if paths.len() > 1 { "s" } else { "" },
+                pluralise!(paths.len()),
                 paths.join(", "),
             );
 
@@ -1433,15 +1433,17 @@ fn import_path_to_string(names: &[Ident],
     let global = !names.is_empty() && names[0].name == kw::PathRoot;
     if let Some(pos) = pos {
         let names = if global { &names[1..pos + 1] } else { &names[..pos + 1] };
-        names_to_string(names)
+        names_to_string(&names.iter().map(|ident| ident.name).collect::<Vec<_>>())
     } else {
         let names = if global { &names[1..] } else { names };
         if names.is_empty() {
             import_directive_subclass_to_string(subclass)
         } else {
-            format!("{}::{}",
-                    names_to_string(names),
-                    import_directive_subclass_to_string(subclass))
+            format!(
+                "{}::{}",
+                names_to_string(&names.iter().map(|ident| ident.name).collect::<Vec<_>>()),
+                import_directive_subclass_to_string(subclass),
+            )
         }
     }
 }

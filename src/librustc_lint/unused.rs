@@ -9,7 +9,7 @@ use lint::{LintPass, EarlyLintPass, LateLintPass};
 
 use syntax::ast;
 use syntax::attr;
-use syntax::errors::Applicability;
+use syntax::errors::{Applicability, pluralise};
 use syntax::feature_gate::{AttributeType, BuiltinAttribute, BUILTIN_ATTRIBUTE_MAP};
 use syntax::print::pprust;
 use syntax::symbol::{kw, sym};
@@ -48,7 +48,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UnusedResults {
         }
 
         let ty = cx.tables.expr_ty(&expr);
-        let type_permits_lack_of_use = check_must_use_ty(cx, ty, &expr, s.span, "", "", false);
+        let type_permits_lack_of_use = check_must_use_ty(cx, ty, &expr, s.span, "", "", 1);
 
         let mut fn_warned = false;
         let mut op_warned = false;
@@ -135,7 +135,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UnusedResults {
             span: Span,
             descr_pre: &str,
             descr_post: &str,
-            plural: bool,
+            plural_len: usize,
         ) -> bool {
             if ty.is_unit() || cx.tcx.is_ty_uninhabited_from(
                 cx.tcx.hir().get_module_parent(expr.hir_id), ty)
@@ -143,13 +143,13 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UnusedResults {
                 return true;
             }
 
-            let plural_suffix = if plural { "s" } else { "" };
+            let plural_suffix = pluralise!(plural_len);
 
             match ty.sty {
                 ty::Adt(..) if ty.is_box() => {
                     let boxed_ty = ty.boxed_ty();
                     let descr_pre = &format!("{}boxed ", descr_pre);
-                    check_must_use_ty(cx, boxed_ty, expr, span, descr_pre, descr_post, plural)
+                    check_must_use_ty(cx, boxed_ty, expr, span, descr_pre, descr_post, plural_len)
                 }
                 ty::Adt(def, _) => {
                     check_must_use_def(cx, def.did, span, descr_pre, descr_post)
@@ -202,7 +202,15 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UnusedResults {
                     for (i, ty) in tys.iter().map(|k| k.expect_ty()).enumerate() {
                         let descr_post = &format!(" in tuple element {}", i);
                         let span = *spans.get(i).unwrap_or(&span);
-                        if check_must_use_ty(cx, ty, expr, span, descr_pre, descr_post, plural) {
+                        if check_must_use_ty(
+                            cx,
+                            ty,
+                            expr,
+                            span,
+                            descr_pre,
+                            descr_post,
+                            plural_len
+                        ) {
                             has_emitted = true;
                         }
                     }
@@ -216,7 +224,7 @@ impl<'a, 'tcx> LateLintPass<'a, 'tcx> for UnusedResults {
                             descr_pre,
                             plural_suffix,
                         );
-                        check_must_use_ty(cx, ty, expr, span, descr_pre, descr_post, true)
+                        check_must_use_ty(cx, ty, expr, span, descr_pre, descr_post, n as usize + 1)
                     }
                     // Otherwise, we don't lint, to avoid false positives.
                     _ => false,
@@ -370,7 +378,8 @@ impl UnusedParens {
                                      right_pos: Option<BytePos>) {
         match value.node {
             ast::ExprKind::Paren(ref inner) => {
-                if !Self::is_expr_parens_necessary(inner, followed_by_block) {
+                if !Self::is_expr_parens_necessary(inner, followed_by_block) &&
+                    value.attrs.is_empty() {
                     let expr_text = if let Ok(snippet) = cx.sess().source_map()
                         .span_to_snippet(value.span) {
                             snippet
@@ -618,24 +627,19 @@ impl UnusedImportBraces {
             }
 
             // Trigger the lint if the nested item is a non-self single item
-            let node_ident;
-            match items[0].0.kind {
+            let node_name = match items[0].0.kind {
                 ast::UseTreeKind::Simple(rename, ..) => {
                     let orig_ident = items[0].0.prefix.segments.last().unwrap().ident;
                     if orig_ident.name == kw::SelfLower {
                         return;
                     }
-                    node_ident = rename.unwrap_or(orig_ident);
+                    rename.unwrap_or(orig_ident).name
                 }
-                ast::UseTreeKind::Glob => {
-                    node_ident = ast::Ident::from_str("*");
-                }
-                ast::UseTreeKind::Nested(_) => {
-                    return;
-                }
-            }
+                ast::UseTreeKind::Glob => Symbol::intern("*"),
+                ast::UseTreeKind::Nested(_) => return,
+            };
 
-            let msg = format!("braces around {} is unnecessary", node_ident.name);
+            let msg = format!("braces around {} is unnecessary", node_name);
             cx.span_lint(UNUSED_IMPORT_BRACES, item.span, &msg);
         }
     }

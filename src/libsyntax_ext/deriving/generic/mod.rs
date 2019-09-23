@@ -237,7 +237,7 @@ pub struct MethodDef<'a> {
     /// Whether there is a self argument (outer Option) i.e., whether
     /// this is a static function, and whether it is a pointer (inner
     /// Option)
-    pub explicit_self: Option<Option<PtrTy<'a>>>,
+    pub explicit_self: Option<Option<PtrTy>>,
 
     /// Arguments other than the self argument
     pub args: Vec<(Ty<'a>, &'a str)>,
@@ -664,7 +664,7 @@ impl<'a> TraitDef<'a> {
         }).collect();
 
         // Create the type of `self`.
-        let path = cx.path_all(self.span, false, vec![type_ident], self_params, vec![]);
+        let path = cx.path_all(self.span, false, vec![type_ident], self_params);
         let self_type = cx.ty_path(path);
 
         let attr = cx.attribute(cx.meta_word(self.span, sym::automatically_derived));
@@ -672,8 +672,11 @@ impl<'a> TraitDef<'a> {
         attr::mark_used(&attr);
         let opt_trait_ref = Some(trait_ref);
         let unused_qual = {
-            let word = cx.meta_list_item_word(self.span, Symbol::intern("unused_qualifications"));
-            cx.attribute(cx.meta_list(self.span, sym::allow, vec![word]))
+            let word = syntax::attr::mk_nested_word_item(
+                Ident::new(Symbol::intern("unused_qualifications"), self.span));
+            let list = syntax::attr::mk_list_item(
+                Ident::new(sym::allow, self.span), vec![word]);
+            cx.attribute(list)
         };
 
         let mut a = vec![attr, unused_qual];
@@ -843,7 +846,7 @@ impl<'a> MethodDef<'a> {
                                 -> P<Expr> {
         let substructure = Substructure {
             type_ident,
-            method_ident: cx.ident_of(self.name),
+            method_ident: cx.ident_of(self.name, trait_.span),
             self_args,
             nonself_args,
             fields,
@@ -890,7 +893,7 @@ impl<'a> MethodDef<'a> {
 
         for (ty, name) in self.args.iter() {
             let ast_ty = ty.to_ty(cx, trait_.span, type_ident, generics);
-            let ident = ast::Ident::from_str_and_span(name, trait_.span);
+            let ident = cx.ident_of(name, trait_.span);
             arg_tys.push((ident, ast_ty));
 
             let arg_expr = cx.expr_ident(trait_.span, ident);
@@ -938,7 +941,7 @@ impl<'a> MethodDef<'a> {
 
         let ret_type = self.get_ret_ty(cx, trait_, generics, type_ident);
 
-        let method_ident = cx.ident_of(self.name);
+        let method_ident = cx.ident_of(self.name, trait_.span);
         let fn_decl = cx.fn_decl(args, ast::FunctionRetTy::Ty(ret_type));
         let body_block = cx.block_expr(body);
 
@@ -1201,7 +1204,7 @@ impl<'a> MethodDef<'a> {
             ).collect::<Vec<String>>();
 
         let self_arg_idents = self_arg_names.iter()
-            .map(|name| cx.ident_of(&name[..]))
+            .map(|name| cx.ident_of(name, sp))
             .collect::<Vec<ast::Ident>>();
 
         // The `vi_idents` will be bound, solely in the catch-all, to
@@ -1210,7 +1213,7 @@ impl<'a> MethodDef<'a> {
         let vi_idents = self_arg_names.iter()
             .map(|name| {
                 let vi_suffix = format!("{}_vi", &name[..]);
-                ast::Ident::from_str_and_span(&vi_suffix[..], trait_.span)
+                cx.ident_of(&vi_suffix[..], trait_.span)
             })
             .collect::<Vec<ast::Ident>>();
 
@@ -1389,7 +1392,7 @@ impl<'a> MethodDef<'a> {
 
                 let target_ty = cx.ty_ident(
                     sp,
-                    ast::Ident::from_str_and_span(target_type_name, sp),
+                    cx.ident_of(target_type_name, sp),
                 );
                 let variant_disr = cx.expr_cast(sp, variant_value, target_ty);
                 let let_stmt = cx.stmt_let(sp, false, ident, variant_disr);
@@ -1591,7 +1594,7 @@ impl<'a> TraitDef<'a> {
         let mut ident_exprs = Vec::new();
         for (i, struct_field) in struct_def.fields().iter().enumerate() {
             let sp = struct_field.span.with_ctxt(self.span.ctxt());
-            let ident = ast::Ident::from_str_and_span(&format!("{}_{}", prefix, i), self.span);
+            let ident = cx.ident_of(&format!("{}_{}", prefix, i), self.span);
             paths.push(ident.with_span_pos(sp));
             let val = cx.expr_path(cx.path_ident(sp, ident));
             let val = if use_temporaries {

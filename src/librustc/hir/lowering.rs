@@ -1316,7 +1316,7 @@ impl<'a> LoweringContext<'a> {
                             ImplTraitContext::Universal(in_band_ty_params),
                         );
                         // Set the name to `impl Bound1 + Bound2`.
-                        let ident = Ident::from_str(&pprust::ty_to_string(t)).with_span_pos(span);
+                        let ident = Ident::from_str_and_span(&pprust::ty_to_string(t), span);
                         in_band_ty_params.push(hir::GenericParam {
                             hir_id: self.lower_node_id(def_node_id),
                             name: ParamName::Plain(ident),
@@ -1893,10 +1893,13 @@ impl<'a> LoweringContext<'a> {
                         if let Ok(snippet) = self.sess.source_map().span_to_snippet(data.span) {
                             // Do not suggest going from `Trait()` to `Trait<>`
                             if data.inputs.len() > 0 {
+                                let split = snippet.find('(').unwrap();
+                                let trait_name = &snippet[0..split];
+                                let args = &snippet[split + 1 .. snippet.len() - 1];
                                 err.span_suggestion(
                                     data.span,
                                     "use angle brackets instead",
-                                    format!("<{}>", &snippet[1..snippet.len() - 1]),
+                                    format!("{}<{}>", trait_name, args),
                                     Applicability::MaybeIncorrect,
                                 );
                             }
@@ -2682,12 +2685,8 @@ impl<'a> LoweringContext<'a> {
         bounds.iter().map(|bound| self.lower_param_bound(bound, itctx.reborrow())).collect()
     }
 
-    fn lower_block_with_stmts(
-        &mut self,
-        b: &Block,
-        targeted_by_break: bool,
-        mut stmts: Vec<hir::Stmt>,
-    ) -> P<hir::Block> {
+    fn lower_block(&mut self, b: &Block, targeted_by_break: bool) -> P<hir::Block> {
+        let mut stmts = vec![];
         let mut expr = None;
 
         for (index, stmt) in b.stmts.iter().enumerate() {
@@ -2712,8 +2711,11 @@ impl<'a> LoweringContext<'a> {
         })
     }
 
-    fn lower_block(&mut self, b: &Block, targeted_by_break: bool) -> P<hir::Block> {
-        self.lower_block_with_stmts(b, targeted_by_break, vec![])
+    /// Lowers a block directly to an expression, presuming that it
+    /// has no attributes and is not targeted by a `break`.
+    fn lower_block_expr(&mut self, b: &Block) -> hir::Expr {
+        let block = self.lower_block(b, false);
+        self.expr_block(block, ThinVec::new())
     }
 
     fn lower_pat(&mut self, p: &Pat) -> P<hir::Pat> {

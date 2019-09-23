@@ -33,17 +33,19 @@ use crate::ty::subst::Subst;
 use crate::ty::SubtypePredicate;
 use crate::util::nodemap::{FxHashMap, FxHashSet};
 
-use errors::{Applicability, DiagnosticBuilder};
+use errors::{Applicability, DiagnosticBuilder, pluralise};
 use std::fmt;
 use syntax::ast;
 use syntax::symbol::{sym, kw};
 use syntax_pos::{DUMMY_SP, Span, ExpnKind};
 
 impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
-    pub fn report_fulfillment_errors(&self,
-                                     errors: &[FulfillmentError<'tcx>],
-                                     body_id: Option<hir::BodyId>,
-                                     fallback_has_occurred: bool) {
+    pub fn report_fulfillment_errors(
+        &self,
+        errors: &[FulfillmentError<'tcx>],
+        body_id: Option<hir::BodyId>,
+        fallback_has_occurred: bool,
+    ) {
         #[derive(Debug)]
         struct ErrorDescriptor<'tcx> {
             predicate: ty::Predicate<'tcx>,
@@ -119,11 +121,11 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
 
     // returns if `cond` not occurring implies that `error` does not occur - i.e., that
     // `error` occurring implies that `cond` occurs.
-    fn error_implies(&self,
-                     cond: &ty::Predicate<'tcx>,
-                     error: &ty::Predicate<'tcx>)
-                     -> bool
-    {
+    fn error_implies(
+        &self,
+        cond: &ty::Predicate<'tcx>,
+        error: &ty::Predicate<'tcx>,
+    ) -> bool {
         if cond == error {
             return true
         }
@@ -155,13 +157,21 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         false
     }
 
-    fn report_fulfillment_error(&self, error: &FulfillmentError<'tcx>,
-                                body_id: Option<hir::BodyId>,
-                                fallback_has_occurred: bool) {
+    fn report_fulfillment_error(
+        &self,
+        error: &FulfillmentError<'tcx>,
+        body_id: Option<hir::BodyId>,
+        fallback_has_occurred: bool,
+    ) {
         debug!("report_fulfillment_errors({:?})", error);
         match error.code {
-            FulfillmentErrorCode::CodeSelectionError(ref e) => {
-                self.report_selection_error(&error.obligation, e, fallback_has_occurred);
+            FulfillmentErrorCode::CodeSelectionError(ref selection_error) => {
+                self.report_selection_error(
+                    &error.obligation,
+                    selection_error,
+                    fallback_has_occurred,
+                    error.points_at_arg_span,
+                );
             }
             FulfillmentErrorCode::CodeProjectionError(ref e) => {
                 self.report_projection_error(&error.obligation, e);
@@ -170,19 +180,21 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 self.maybe_report_ambiguity(&error.obligation, body_id);
             }
             FulfillmentErrorCode::CodeSubtypeError(ref expected_found, ref err) => {
-                self.report_mismatched_types(&error.obligation.cause,
-                                             expected_found.expected,
-                                             expected_found.found,
-                                             err.clone())
-                    .emit();
+                self.report_mismatched_types(
+                    &error.obligation.cause,
+                    expected_found.expected,
+                    expected_found.found,
+                    err.clone(),
+                ).emit();
             }
         }
     }
 
-    fn report_projection_error(&self,
-                               obligation: &PredicateObligation<'tcx>,
-                               error: &MismatchedProjectionTypes<'tcx>)
-    {
+    fn report_projection_error(
+        &self,
+        obligation: &PredicateObligation<'tcx>,
+        error: &MismatchedProjectionTypes<'tcx>,
+    ) {
         let predicate =
             self.resolve_vars_if_possible(&obligation.predicate);
 
@@ -603,6 +615,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         obligation: &PredicateObligation<'tcx>,
         error: &SelectionError<'tcx>,
         fallback_has_occurred: bool,
+        points_at_arg: bool,
     ) {
         let span = obligation.cause.span;
 
@@ -690,7 +703,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                         }
 
                         self.suggest_borrow_on_unsized_slice(&obligation.cause.code, &mut err);
-                        self.suggest_fn_call(&obligation, &mut err, &trait_ref);
+                        self.suggest_fn_call(&obligation, &mut err, &trait_ref, points_at_arg);
                         self.suggest_remove_reference(&obligation, &mut err, &trait_ref);
                         self.suggest_semicolon_removal(&obligation, &mut err, span, &trait_ref);
 
@@ -963,6 +976,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         obligation: &PredicateObligation<'tcx>,
         err: &mut DiagnosticBuilder<'tcx>,
         trait_ref: &ty::Binder<ty::TraitRef<'tcx>>,
+        points_at_arg: bool,
     ) {
         let self_ty = trait_ref.self_ty();
         match self_ty.sty {
@@ -991,15 +1005,31 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                             ..
                         })) = self.tcx.hir().get_if_local(def_id) {
                             let body = self.tcx.hir().body(*body_id);
-                            err.help(&format!(
-                                "use parentheses to call the function: `{}({})`",
+                            let msg = "use parentheses to call the function";
+                            let snippet = format!(
+                                "{}({})",
                                 ident,
                                 body.params.iter()
                                     .map(|arg| match &arg.pat.node {
                                         hir::PatKind::Binding(_, _, ident, None)
                                         if ident.name != kw::SelfLower => ident.to_string(),
                                         _ => "_".to_string(),
-                                    }).collect::<Vec<_>>().join(", ")));
+                                    }).collect::<Vec<_>>().join(", "),
+                            );
+                            // When the obligation error has been ensured to have been caused by
+                            // an argument, the `obligation.cause.span` points at the expression
+                            // of the argument, so we can provide a suggestion. This is signaled
+                            // by `points_at_arg`. Otherwise, we give a more general note.
+                            if points_at_arg {
+                                err.span_suggestion(
+                                    obligation.cause.span,
+                                    msg,
+                                    snippet,
+                                    Applicability::HasPlaceholders,
+                                );
+                            } else {
+                                err.help(&format!("{}: `{}`", msg, snippet));
+                            }
                         }
                     }
                     _ => {}
@@ -1025,6 +1055,13 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 .filter(|c| !c.is_whitespace())
                 .take_while(|c| *c == '&')
                 .count();
+            if let Some('\'') = snippet.chars()
+                .filter(|c| !c.is_whitespace())
+                .skip(refs_number)
+                .next()
+            { // Do not suggest removal of borrow from type arguments.
+                return;
+            }
 
             let mut trait_type = trait_ref.self_ty();
 
@@ -1186,7 +1223,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 _ => format!("{} {}argument{}",
                              arg_length,
                              if distinct && arg_length > 1 { "distinct " } else { "" },
-                             if arg_length == 1 { "" } else { "s" }),
+                             pluralise!(arg_length))
             }
         };
 
@@ -1619,6 +1656,18 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
                 if let Some(sp) = tcx.hir().span_if_local(item_def_id) {
                     let sp = tcx.sess.source_map().def_span(sp);
                     err.span_label(sp, &msg);
+                } else {
+                    err.note(&msg);
+                }
+            }
+            ObligationCauseCode::BindingObligation(item_def_id, span) => {
+                let item_name = tcx.def_path_str(item_def_id);
+                let msg = format!("required by this bound in `{}`", item_name);
+                if let Some(ident) = tcx.opt_item_name(item_def_id) {
+                    err.span_label(ident.span, "");
+                }
+                if span != DUMMY_SP {
+                    err.span_label(span, &msg);
                 } else {
                     err.note(&msg);
                 }
