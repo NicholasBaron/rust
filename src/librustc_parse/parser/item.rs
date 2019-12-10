@@ -3,6 +3,8 @@ use super::diagnostics::{Error, dummy_arg, ConsumeClosingDelim};
 
 use crate::maybe_whole;
 
+use rustc_errors::{PResult, Applicability, DiagnosticBuilder, StashKey};
+use rustc_error_codes::*;
 use syntax::ast::{self, DUMMY_NODE_ID, Ident, Attribute, AttrKind, AttrStyle, AnonConst, Item};
 use syntax::ast::{ItemKind, ImplItem, ImplItemKind, TraitItem, TraitItemKind, UseTree, UseTreeKind};
 use syntax::ast::{PathSegment, IsAuto, Constness, IsAsync, Unsafety, Defaultness, Extern, StrLit};
@@ -14,16 +16,13 @@ use syntax::ptr::P;
 use syntax::ThinVec;
 use syntax::token;
 use syntax::tokenstream::{DelimSpan, TokenTree, TokenStream};
-use syntax::source_map::{self, respan, Span};
 use syntax::struct_span_err;
 use syntax_pos::BytePos;
+use syntax_pos::source_map::{self, respan, Span};
 use syntax_pos::symbol::{kw, sym, Symbol};
-
-use rustc_error_codes::*;
 
 use log::debug;
 use std::mem;
-use errors::{PResult, Applicability, DiagnosticBuilder, StashKey};
 
 pub(super) type ItemInfo = (Ident, ItemKind, Option<Vec<Attribute>>);
 
@@ -1182,6 +1181,7 @@ impl<'a> Parser<'a> {
                         attrs,
                         vis: visibility,
                         kind: ForeignItemKind::Macro(mac),
+                        tokens: None,
                     }
                 )
             }
@@ -1212,6 +1212,7 @@ impl<'a> Parser<'a> {
             id: DUMMY_NODE_ID,
             span: lo.to(hi),
             vis,
+            tokens: None,
         })
     }
 
@@ -1229,7 +1230,8 @@ impl<'a> Parser<'a> {
             kind: ForeignItemKind::Ty,
             id: DUMMY_NODE_ID,
             span: lo.to(hi),
-            vis
+            vis,
+            tokens: None,
         })
     }
 
@@ -1325,7 +1327,7 @@ impl<'a> Parser<'a> {
 
         let (variants, _) = self.parse_delim_comma_seq(
             token::Brace,
-            |p| p.parse_enum_item(),
+            |p| p.parse_enum_variant(),
         ).map_err(|e| {
             self.recover_stmt();
             e
@@ -1337,7 +1339,7 @@ impl<'a> Parser<'a> {
         Ok((id, ItemKind::Enum(enum_definition, generics), None))
     }
 
-    fn parse_enum_item(&mut self) -> PResult<'a, Option<Variant>> {
+    fn parse_enum_variant(&mut self) -> PResult<'a, Option<Variant>> {
         let variant_attrs = self.parse_outer_attributes()?;
         let vlo = self.token.span;
 
@@ -1728,9 +1730,10 @@ impl<'a> Parser<'a> {
     /// Checks if current token is one of tokens which cannot be nested like `kw::Enum`. In case
     /// it is, we try to parse the item and report error about nested types.
     fn recover_nested_adt_item(&mut self, keyword: Symbol) -> PResult<'a, bool> {
-        if self.token.is_keyword(kw::Enum) ||
+        if (self.token.is_keyword(kw::Enum) ||
             self.token.is_keyword(kw::Struct) ||
-            self.token.is_keyword(kw::Union)
+            self.token.is_keyword(kw::Union))
+           && self.look_ahead(1, |t| t.is_ident())
         {
             let kw_token = self.token.clone();
             let kw_str = pprust::token_to_string(&kw_token);
@@ -1826,6 +1829,7 @@ impl<'a> Parser<'a> {
             id: DUMMY_NODE_ID,
             span,
             vis,
+            tokens: None,
         })
     }
 

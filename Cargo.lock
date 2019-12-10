@@ -1294,7 +1294,7 @@ checksum = "473a1265acc8ff1e808cd0a1af8cee3c2ee5200916058a2ca113c29f2d903571"
 dependencies = [
  "cfg-if",
  "libc",
- "wasi",
+ "wasi 0.7.0",
 ]
 
 [[package]]
@@ -2055,12 +2055,13 @@ dependencies = [
 
 [[package]]
 name = "measureme"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd21b0e6e1af976b269ce062038fe5e1b9ca2f817ab7a3af09ec4210aebf0d30"
+checksum = "c420bbc064623934620b5ab2dc0cf96451b34163329e82f95e7fa1b7b99a6ac8"
 dependencies = [
  "byteorder",
  "memmap",
+ "parking_lot 0.9.0",
  "rustc-hash",
 ]
 
@@ -2072,9 +2073,9 @@ checksum = "2efc7bc57c883d4a4d6e3246905283d8dae951bb3bd32f49d6ef297f546e1c39"
 
 [[package]]
 name = "memmap"
-version = "0.6.2"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2ffa2c986de11a9df78620c01eeaaf27d94d3ff02bf81bfcca953102dd0c6ff"
+checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
 dependencies = [
  "libc",
  "winapi 0.3.8",
@@ -2213,6 +2214,7 @@ dependencies = [
  "rand 0.7.0",
  "rustc-workspace-hack",
  "rustc_version",
+ "serde",
  "shell-escape",
  "vergen",
 ]
@@ -2575,9 +2577,9 @@ checksum = "676e8eb2b1b4c9043511a9b7bea0915320d7e502b0a079fb03f9635a5252b18c"
 
 [[package]]
 name = "polonius-engine"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50fa9dbfd0d3d60594da338cfe6f94028433eecae4b11b7e83fd99759227bbfe"
+checksum = "1e478d7c38eb785c6416cbe58df12aa55d7aefa3759b6d3e044b2ed03f423cec"
 dependencies = [
  "datafrog",
  "log",
@@ -3205,6 +3207,7 @@ dependencies = [
  "rustc_fs_util",
  "rustc_index",
  "rustc_macros",
+ "rustc_session",
  "rustc_target",
  "scoped-tls",
  "serialize",
@@ -3518,6 +3521,7 @@ dependencies = [
  "rustc_fs_util",
  "rustc_incremental",
  "rustc_index",
+ "rustc_session",
  "rustc_target",
  "serialize",
  "syntax",
@@ -3634,6 +3638,7 @@ dependencies = [
  "rustc",
  "rustc_data_structures",
  "rustc_fs_util",
+ "rustc_session",
  "serialize",
  "syntax",
  "syntax_pos",
@@ -3697,6 +3702,7 @@ dependencies = [
  "rustc_error_codes",
  "rustc_feature",
  "rustc_index",
+ "rustc_session",
  "rustc_target",
  "syntax",
  "syntax_pos",
@@ -3802,7 +3808,6 @@ dependencies = [
  "rustc_errors",
  "rustc_feature",
  "rustc_lexer",
- "rustc_target",
  "smallvec 1.0.0",
  "syntax",
  "syntax_pos",
@@ -3881,6 +3886,22 @@ dependencies = [
  "rustc_parse",
  "serde_json",
  "syntax",
+ "syntax_pos",
+]
+
+[[package]]
+name = "rustc_session"
+version = "0.0.0"
+dependencies = [
+ "log",
+ "num_cpus",
+ "rustc_data_structures",
+ "rustc_errors",
+ "rustc_feature",
+ "rustc_fs_util",
+ "rustc_index",
+ "rustc_target",
+ "serialize",
  "syntax_pos",
 ]
 
@@ -4301,7 +4322,7 @@ dependencies = [
  "rustc_msan",
  "rustc_tsan",
  "unwind",
- "wasi",
+ "wasi 0.9.0+wasi-snapshot-preview1",
 ]
 
 [[package]]
@@ -4463,6 +4484,7 @@ dependencies = [
  "rustc_index",
  "rustc_lexer",
  "rustc_macros",
+ "rustc_session",
  "scoped-tls",
  "serialize",
  "smallvec 1.0.0",
@@ -5172,6 +5194,12 @@ name = "wasi"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b89c3ce4ce14bdc6fb6beaf9ec7928ca331de5df7e5ea278375642a2f478570d"
+
+[[package]]
+name = "wasi"
+version = "0.9.0+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 dependencies = [
  "compiler_builtins",
  "rustc-std-workspace-alloc",

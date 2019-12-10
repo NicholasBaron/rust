@@ -12,6 +12,7 @@
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/")]
 
 #![cfg_attr(test, feature(test))]
+#![feature(bool_to_option)]
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(nll)]
@@ -21,6 +22,8 @@
 
 #[macro_use]
 extern crate rustc;
+#[macro_use]
+extern crate rustc_session;
 
 mod array_into_iter;
 mod nonstandard_style;
@@ -338,7 +341,7 @@ fn register_builtins(store: &mut lint::LintStore, no_interleave_lints: bool) {
         "converted into hard error, see https://github.com/rust-lang/rust/issues/46205");
     store.register_removed("legacy_constructor_visibility",
         "converted into hard error, see https://github.com/rust-lang/rust/issues/39207");
-    store.register_removed("legacy_disrectory_ownership",
+    store.register_removed("legacy_directory_ownership",
         "converted into hard error, see https://github.com/rust-lang/rust/issues/37872");
     store.register_removed("safe_extern_statics",
         "converted into hard error, see https://github.com/rust-lang/rust/issues/36247");

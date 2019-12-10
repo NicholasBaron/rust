@@ -38,7 +38,7 @@ use syntax::symbol::Symbol;
 use syntax_pos::{Span, DUMMY_SP};
 
 pub use crate::mir::interpret::AssertMessage;
-pub use crate::mir::cache::{BodyCache, ReadOnlyBodyCache};
+pub use crate::mir::cache::{BodyAndCache, ReadOnlyBodyAndCache};
 pub use crate::read_only;
 
 mod cache;
@@ -108,7 +108,7 @@ pub struct Body<'tcx> {
     pub yield_ty: Option<Ty<'tcx>>,
 
     /// Generator drop glue.
-    pub generator_drop: Option<Box<BodyCache<'tcx>>>,
+    pub generator_drop: Option<Box<BodyAndCache<'tcx>>>,
 
     /// The layout of a generator. Produced by the state transformation.
     pub generator_layout: Option<GeneratorLayout<'tcx>>,
@@ -242,11 +242,7 @@ impl<'tcx> Body<'tcx> {
     pub fn vars_iter<'a>(&'a self) -> impl Iterator<Item = Local> + 'a {
         (self.arg_count + 1..self.local_decls.len()).filter_map(move |index| {
             let local = Local::new(index);
-            if self.local_decls[local].is_user_variable() {
-                Some(local)
-            } else {
-                None
-            }
+            self.local_decls[local].is_user_variable().then_some(local)
         })
     }
 
@@ -2601,7 +2597,7 @@ impl Location {
     pub fn is_predecessor_of<'tcx>(
         &self,
         other: Location,
-        body: ReadOnlyBodyCache<'_, 'tcx>
+        body: ReadOnlyBodyAndCache<'_, 'tcx>
     ) -> bool {
         // If we are in the same block as the other location and are an earlier statement
         // then we are a predecessor of `other`.

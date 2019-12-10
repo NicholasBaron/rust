@@ -7,6 +7,7 @@
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/",
        test(attr(deny(warnings))))]
 
+#![feature(bool_to_option)]
 #![feature(box_syntax)]
 #![feature(const_fn)]
 #![feature(const_transmute)]
@@ -102,7 +103,7 @@ pub mod ptr;
 pub mod show_span;
 pub use syntax_pos::edition;
 pub use syntax_pos::symbol;
-pub mod sess;
+pub use rustc_session::parse as sess;
 pub mod token;
 pub mod tokenstream;
 pub mod visit;

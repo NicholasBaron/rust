@@ -416,11 +416,7 @@ impl<'a, Ty> ArgAbi<'a, Ty> {
         // i686-pc-windows-msvc, it results in wrong stack offsets.
         // attrs.pointee_align = Some(self.layout.align.abi);
 
-        let extra_attrs = if self.layout.is_unsized() {
-            Some(ArgAttributes::new())
-        } else {
-            None
-        };
+        let extra_attrs = self.layout.is_unsized().then_some(ArgAttributes::new());
 
         self.mode = PassMode::Indirect(attrs, extra_attrs);
     }
@@ -492,7 +488,12 @@ impl<'a, Ty> ArgAbi<'a, Ty> {
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Conv {
+    // General language calling conventions, for which every target
+    // should have its own backend (e.g. LLVM) support.
     C,
+    Rust,
+
+    // Target-specific calling conventions.
 
     ArmAapcs,
 

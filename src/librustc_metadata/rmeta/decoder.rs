@@ -18,7 +18,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_data_structures::svh::Svh;
 use rustc::dep_graph::{self, DepNodeIndex};
 use rustc::middle::lang_items;
-use rustc::mir::{self, BodyCache, interpret, Promoted};
+use rustc::mir::{self, BodyAndCache, interpret, Promoted};
 use rustc::mir::interpret::{AllocDecodingSession, AllocDecodingState};
 use rustc::session::Session;
 use rustc::ty::{self, Ty, TyCtxt};
@@ -1079,7 +1079,7 @@ impl<'a, 'tcx> CrateMetadata {
             self.root.per_def.mir.get(self, id).is_some()
     }
 
-    fn get_optimized_mir(&self, tcx: TyCtxt<'tcx>, id: DefIndex) -> BodyCache<'tcx> {
+    fn get_optimized_mir(&self, tcx: TyCtxt<'tcx>, id: DefIndex) -> BodyAndCache<'tcx> {
         let mut cache = self.root.per_def.mir.get(self, id)
             .filter(|_| !self.is_proc_macro(id))
             .unwrap_or_else(|| {
@@ -1094,7 +1094,7 @@ impl<'a, 'tcx> CrateMetadata {
         &self,
         tcx: TyCtxt<'tcx>,
         id: DefIndex,
-    ) -> IndexVec<Promoted, BodyCache<'tcx>> {
+    ) -> IndexVec<Promoted, BodyAndCache<'tcx>> {
         let mut cache = self.root.per_def.promoted_mir.get(self, id)
             .filter(|_| !self.is_proc_macro(id))
             .unwrap_or_else(|| {
@@ -1360,10 +1360,16 @@ impl<'a, 'tcx> CrateMetadata {
         }
     }
 
+    // This replicates some of the logic of the crate-local `is_const_fn_raw` query, because we
+    // don't serialize constness for tuple variant and tuple struct constructors.
     fn is_const_fn_raw(&self, id: DefIndex) -> bool {
         let constness = match self.kind(id) {
             EntryKind::Method(data) => data.decode(self).fn_data.constness,
             EntryKind::Fn(data) => data.decode(self).constness,
+            // Some intrinsics can be const fn. While we could recompute this (at least until we
+            // stop having hardcoded whitelists and move to stability attributes), it seems cleaner
+            // to treat all const fns equally.
+            EntryKind::ForeignFn(data) => data.decode(self).constness,
             EntryKind::Variant(..) | EntryKind::Struct(..) => hir::Constness::Const,
             _ => hir::Constness::NotConst,
         };

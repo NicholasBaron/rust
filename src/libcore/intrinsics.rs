@@ -939,6 +939,7 @@ extern "rust-intrinsic" {
     /// }
     /// ```
     #[stable(feature = "rust1", since = "1.0.0")]
+    #[rustc_const_unstable(feature = "const_transmute")]
     pub fn transmute<T, U>(e: T) -> U;
 
     /// Returns `true` if the actual type given as `T` requires drop
@@ -1142,6 +1143,11 @@ extern "rust-intrinsic" {
     /// Float remainder that allows optimizations based on algebraic rules.
     /// May assume inputs are finite.
     pub fn frem_fast<T>(a: T, b: T) -> T;
+
+    /// Convert with LLVM’s fptoui/fptosi, which may return undef for values out of range
+    /// https://github.com/rust-lang/rust/issues/10184
+    #[cfg(not(bootstrap))]
+    pub fn float_to_int_approx_unchecked<Float, Int>(value: Float) -> Int;
 
 
     /// Returns the number of bits set in an integer type `T`

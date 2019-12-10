@@ -408,10 +408,6 @@ declare_features! (
     /// Allows using `#[doc(keyword = "...")]`.
     (active, doc_keyword, "1.28.0", Some(51315), None),
 
-    /// Allows reinterpretation of the bits of a value of one type as another
-    /// type during const eval.
-    (active, const_transmute, "1.29.0", Some(53605), None),
-
     /// Allows using `try {...}` expressions.
     (active, try_blocks, "1.29.0", Some(31436), None),
 
@@ -527,6 +523,9 @@ declare_features! (
     /// Allows the use of `#[cfg(sanitize = "option")]`; set when -Zsanitizer is used.
     (active, cfg_sanitize, "1.41.0", Some(39699), None),
 
+    /// Allows using `&mut` in constant functions.
+    (active, const_mut_refs, "1.41.0", Some(57349), None),
+
     // -------------------------------------------------------------------------
     // feature-group-end: actual feature gates
     // -------------------------------------------------------------------------
@@ -542,5 +541,4 @@ pub const INCOMPLETE_FEATURES: &[Symbol] = &[
     sym::or_patterns,
     sym::let_chains,
     sym::raw_dylib,
-    sym::track_caller,
 ];

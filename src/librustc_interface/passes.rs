@@ -439,8 +439,7 @@ fn configure_and_expand_inner<'a>(
     sess.parse_sess.buffered_lints.with_lock(|buffered_lints| {
         info!("{} parse sess buffered_lints", buffered_lints.len());
         for BufferedEarlyLint{id, span, msg, lint_id} in buffered_lints.drain(..) {
-            let lint = lint::Lint::from_parser_lint_id(lint_id);
-            resolver.lint_buffer().buffer_lint(lint, id, span, &msg);
+            resolver.lint_buffer().buffer_lint(lint_id, id, span, &msg);
         }
     });
 
@@ -548,13 +547,7 @@ fn output_contains_path(output_paths: &[PathBuf], input_path: &PathBuf) -> bool 
 }
 
 fn output_conflicts_with_dir(output_paths: &[PathBuf]) -> Option<PathBuf> {
-    let check = |output_path: &PathBuf| {
-        if output_path.is_dir() {
-            Some(output_path.clone())
-        } else {
-            None
-        }
-    };
+    let check = |output_path: &PathBuf| output_path.is_dir().then(|| output_path.clone());
     check_output(output_paths, check)
 }
 

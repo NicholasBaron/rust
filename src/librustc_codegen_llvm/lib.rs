@@ -6,6 +6,7 @@
 
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/")]
 
+#![feature(bool_to_option)]
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(const_cstr_unchecked)]
@@ -43,6 +44,7 @@ extern crate smallvec;
 extern crate syntax;
 extern crate syntax_pos;
 extern crate rustc_errors as errors;
+extern crate rustc_session;
 
 use rustc_codegen_ssa::traits::*;
 use rustc_codegen_ssa::back::write::{CodegenContext, ModuleConfig, FatLTOInput};

@@ -29,6 +29,7 @@
 #![doc(html_root_url = "https://doc.rust-lang.org/nightly/")]
 
 #![feature(arbitrary_self_types)]
+#![feature(bool_to_option)]
 #![feature(box_patterns)]
 #![feature(box_syntax)]
 #![feature(const_fn)]
@@ -64,7 +65,6 @@
 #![recursion_limit="512"]
 
 #[macro_use] extern crate bitflags;
-extern crate getopts;
 #[macro_use] extern crate scoped_tls;
 #[cfg(windows)]
 extern crate libc;
@@ -73,10 +73,6 @@ extern crate libc;
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
 #[macro_use] extern crate smallvec;
-
-// Use the test crate here so we depend on getopts through it. This allow tools to link to both
-// librustc_driver and libtest.
-extern crate test as _;
 
 #[cfg(test)]
 mod tests;
@@ -113,7 +109,7 @@ pub mod middle {
 }
 
 pub mod mir;
-pub mod session;
+pub use rustc_session as session;
 pub mod traits;
 pub mod ty;
 

@@ -22,7 +22,7 @@ use rustc_fs_util::{path_to_c_string, link_or_copy};
 use rustc_data_structures::small_c_str::SmallCStr;
 use errors::{Handler, FatalError};
 
-use std::ffi::{CString, CStr};
+use std::ffi::CString;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -167,7 +167,7 @@ pub fn target_machine_factory(sess: &Session, optlvl: config::OptLevel, find_fea
     let emit_stack_size_section = sess.opts.debugging_opts.emit_stack_sizes;
 
     let asm_comments = sess.asm_comments();
-
+    let relax_elf_relocations = sess.target.target.options.relax_elf_relocations;
     Arc::new(move || {
         let tm = unsafe {
             llvm::LLVMRustCreateTargetMachine(
@@ -183,6 +183,7 @@ pub fn target_machine_factory(sess: &Session, optlvl: config::OptLevel, find_fea
                 singlethread,
                 asm_comments,
                 emit_stack_size_section,
+                relax_elf_relocations,
             )
         };
 
@@ -587,14 +588,11 @@ pub(crate) unsafe fn codegen(cgcx: &CodegenContext<LlvmCodegenBackend>,
                     cursor.position() as size_t
                 }
 
-                with_codegen(tm, llmod, config.no_builtins, |cpm| {
-                    let result =
-                        llvm::LLVMRustPrintModule(cpm, llmod, out_c.as_ptr(), demangle_callback);
-                    llvm::LLVMDisposePassManager(cpm);
-                    result.into_result().map_err(|()| {
-                        let msg = format!("failed to write LLVM IR to {}", out.display());
-                        llvm_err(diag_handler, &msg)
-                    })
+                let result =
+                    llvm::LLVMRustPrintModule(llmod, out_c.as_ptr(), demangle_callback);
+                result.into_result().map_err(|()| {
+                    let msg = format!("failed to write LLVM IR to {}", out.display());
+                    llvm_err(diag_handler, &msg)
                 })?;
             }
 
@@ -835,8 +833,8 @@ fn create_msvc_imps(
             })
             .filter_map(|val| {
                 // Exclude some symbols that we know are not Rust symbols.
-                let name = CStr::from_ptr(llvm::LLVMGetValueName(val));
-                if ignored(name.to_bytes()) {
+                let name = llvm::get_value_name(val);
+                if ignored(name) {
                     None
                 } else {
                     Some((val, name))
@@ -844,7 +842,7 @@ fn create_msvc_imps(
             })
             .map(move |(val, name)| {
                 let mut imp_name = prefix.as_bytes().to_vec();
-                imp_name.extend(name.to_bytes());
+                imp_name.extend(name);
                 let imp_name = CString::new(imp_name).unwrap();
                 (imp_name, val)
             })

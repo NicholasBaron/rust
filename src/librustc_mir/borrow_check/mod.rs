@@ -9,8 +9,8 @@ use rustc::lint::builtin::UNUSED_MUT;
 use rustc::lint::builtin::{MUTABLE_BORROW_RESERVATION_CONFLICT};
 use rustc::mir::{AggregateKind, BasicBlock, BorrowCheckResult, BorrowKind};
 use rustc::mir::{
-    ClearCrossCrate, Local, Location, Body, BodyCache, Mutability, Operand, Place, PlaceBase,
-    PlaceElem, PlaceRef, ReadOnlyBodyCache, Static, StaticKind, read_only
+    ClearCrossCrate, Local, Location, Body, BodyAndCache, Mutability, Operand, Place, PlaceBase,
+    PlaceElem, PlaceRef, ReadOnlyBodyAndCache, Static, StaticKind, read_only
 };
 use rustc::mir::{Field, ProjectionElem, Promoted, Rvalue, Statement, StatementKind};
 use rustc::mir::{Terminator, TerminatorKind};
@@ -46,17 +46,14 @@ use self::flows::Flows;
 use self::location::LocationTable;
 use self::prefixes::PrefixSet;
 use self::MutateMode::{JustWrite, WriteAndRead};
-use self::mutability_errors::AccessKind;
+use self::diagnostics::AccessKind;
 
 use self::path_utils::*;
 
 crate mod borrow_set;
-mod error_reporting;
+mod diagnostics;
 mod flows;
 mod location;
-mod conflict_errors;
-mod move_errors;
-mod mutability_errors;
 mod path_utils;
 crate mod place_ext;
 crate mod places_conflict;
@@ -102,7 +99,7 @@ fn mir_borrowck(tcx: TyCtxt<'_>, def_id: DefId) -> BorrowCheckResult<'_> {
 fn do_mir_borrowck<'a, 'tcx>(
     infcx: &InferCtxt<'a, 'tcx>,
     input_body: &Body<'tcx>,
-    input_promoted: &IndexVec<Promoted, BodyCache<'tcx>>,
+    input_promoted: &IndexVec<Promoted, BodyAndCache<'tcx>>,
     def_id: DefId,
 ) -> BorrowCheckResult<'tcx> {
     debug!("do_mir_borrowck(def_id = {:?})", def_id);
@@ -164,7 +161,7 @@ fn do_mir_borrowck<'a, 'tcx>(
     // will have a lifetime tied to the inference context.
     let body_clone: Body<'tcx> = input_body.clone();
     let mut promoted = input_promoted.clone();
-    let mut body = BodyCache::new(body_clone);
+    let mut body = BodyAndCache::new(body_clone);
     let free_regions =
         nll::replace_regions_in_mir(infcx, def_id, param_env, &mut body, &mut promoted);
     let body = read_only!(body); // no further changes
@@ -405,7 +402,7 @@ fn do_mir_borrowck<'a, 'tcx>(
 
 crate struct MirBorrowckCtxt<'cx, 'tcx> {
     crate infcx: &'cx InferCtxt<'cx, 'tcx>,
-    body: ReadOnlyBodyCache<'cx, 'tcx>,
+    body: ReadOnlyBodyAndCache<'cx, 'tcx>,
     mir_def_id: DefId,
     param_env: ty::ParamEnv<'tcx>,
     move_data: &'cx MoveData<'tcx>,
@@ -496,7 +493,7 @@ impl<'cx, 'tcx> DataflowResultsConsumer<'cx, 'tcx> for MirBorrowckCtxt<'cx, 'tcx
     type FlowState = Flows<'cx, 'tcx>;
 
     fn body(&self) -> &'cx Body<'tcx> {
-        self.body.body()
+        *self.body
     }
 
     fn visit_block_entry(&mut self, bb: BasicBlock, flow_state: &Self::FlowState) {
@@ -646,7 +643,7 @@ impl<'cx, 'tcx> DataflowResultsConsumer<'cx, 'tcx> for MirBorrowckCtxt<'cx, 'tcx
                 let tcx = self.infcx.tcx;
 
                 // Compute the type with accurate region information.
-                let drop_place_ty = drop_place.ty(&*self.body, self.infcx.tcx);
+                let drop_place_ty = drop_place.ty(*self.body, self.infcx.tcx);
 
                 // Erase the regions.
                 let drop_place_ty = self.infcx.tcx.erase_regions(&drop_place_ty).ty;

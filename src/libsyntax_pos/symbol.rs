@@ -121,6 +121,7 @@ symbols! {
         abi_vectorcall,
         abi_x86_interrupt,
         aborts,
+        add_with_overflow,
         advanced_slice_patterns,
         adx_target_feature,
         alias,
@@ -171,7 +172,10 @@ symbols! {
         box_patterns,
         box_syntax,
         braced_empty_structs,
+        bswap,
+        bitreverse,
         C,
+        caller_location,
         cdylib,
         cfg,
         cfg_attr,
@@ -209,6 +213,7 @@ symbols! {
         const_indexing,
         const_in_array_repeat_expressions,
         const_let,
+        const_mut_refs,
         const_panic,
         const_raw_ptr_deref,
         const_raw_ptr_to_usize_cast,
@@ -226,6 +231,11 @@ symbols! {
         crate_name,
         crate_type,
         crate_visibility_modifier,
+        ctpop,
+        cttz,
+        cttz_nonzero,
+        ctlz,
+        ctlz_nonzero,
         custom_attribute,
         custom_derive,
         custom_inner_attributes,
@@ -431,6 +441,7 @@ symbols! {
         member_constraints,
         message,
         meta,
+        min_align_of,
         min_const_fn,
         min_const_unsafe_fn,
         mips_target_feature,
@@ -440,11 +451,13 @@ symbols! {
         more_struct_aliases,
         move_val_init,
         movbe_target_feature,
+        mul_with_overflow,
         must_use,
         naked,
         naked_functions,
         name,
         needs_allocator,
+        needs_drop,
         needs_panic_runtime,
         negate_unsigned,
         never,
@@ -520,6 +533,7 @@ symbols! {
         poll_with_tls_context,
         powerpc_target_feature,
         precise_pointer_size_matching,
+        pref_align_of,
         prelude,
         prelude_import,
         primitive,
@@ -536,6 +550,7 @@ symbols! {
         proc_macro_non_items,
         proc_macro_path_invoc,
         profiler_runtime,
+        ptr_offset_from,
         pub_restricted,
         pushpop_unsafe,
         quad_precision_float,
@@ -571,6 +586,8 @@ symbols! {
         Return,
         rhs,
         rlib,
+        rotate_left,
+        rotate_right,
         rt,
         rtm_target_feature,
         rust,
@@ -638,14 +655,19 @@ symbols! {
         rvalue_static_promotion,
         sanitize,
         sanitizer_runtime,
+        saturating_add,
+        saturating_sub,
         _Self,
         self_in_typedefs,
         self_struct_ctor,
         should_panic,
         simd,
+        simd_extract,
         simd_ffi,
+        simd_insert,
         since,
         size,
+        size_of,
         slice_patterns,
         slicing_syntax,
         soft,
@@ -673,6 +695,7 @@ symbols! {
         structural_match,
         struct_variant,
         sty,
+        sub_with_overflow,
         suggestion,
         target_feature,
         target_has_atomic,
@@ -708,6 +731,8 @@ symbols! {
         Ty,
         ty,
         type_alias_impl_trait,
+        type_id,
+        type_name,
         TyCtxt,
         TyKind,
         type_alias_enum_variants,
@@ -720,6 +745,8 @@ symbols! {
         u64,
         u8,
         unboxed_closures,
+        unchecked_shl,
+        unchecked_shr,
         underscore_const_names,
         underscore_imports,
         underscore_lifetimes,
@@ -753,6 +780,9 @@ symbols! {
         while_let,
         windows,
         windows_subsystem,
+        wrapping_add,
+        wrapping_sub,
+        wrapping_mul,
         Yield,
     }
 }
@@ -840,12 +870,18 @@ impl Hash for Ident {
 
 impl fmt::Debug for Ident {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_raw_guess() {
+            write!(f, "r#")?;
+        }
         write!(f, "{}{:?}", self.name, self.span.ctxt())
     }
 }
 
 impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_raw_guess() {
+            write!(f, "r#")?;
+        }
         fmt::Display::fmt(&self.name, f)
     }
 }
