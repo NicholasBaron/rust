@@ -2342,7 +2342,7 @@ mod tests {
         #[cfg(all(unix, not(target_os = "vxworks")))]
         error!(result, "No such file or directory");
         #[cfg(target_os = "vxworks")]
-        error!(result, "no such file or directory")
+        error!(result, "no such file or directory");
         #[cfg(windows)]
         error!(result, 2); // ERROR_FILE_NOT_FOUND
     }
